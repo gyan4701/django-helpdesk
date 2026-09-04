@@ -111,18 +111,14 @@ if helpdesk_settings.HELPDESK_KB_ENABLED:
     from helpdesk.models import KBItem
 
 
-DATE_RE: re.Pattern = re.compile(
-    r"(?P<month>\d{1,2})/(?P<day>\d{1,2})/(?P<year>\d{4})$"
-)
+DATE_RE: re.Pattern = re.compile(r"(?P<month>\d{1,2})/(?P<day>\d{1,2})/(?P<year>\d{4})$")
 
 User = get_user_model()
 Query = get_query_class()
 
 if helpdesk_settings.HELPDESK_ALLOW_NON_STAFF_TICKET_UPDATE:
     # treat 'normal' users like 'staff'
-    staff_member_required = user_passes_test(
-        lambda u: u.is_authenticated and u.is_active
-    )
+    staff_member_required = user_passes_test(lambda u: u.is_authenticated and u.is_active)
 else:
     staff_member_required = user_passes_test(
         lambda u: u.is_authenticated and u.is_active and u.is_staff
@@ -399,9 +395,7 @@ def followup_edit(request, ticket_id, followup_id):
         if ticket.status not in Ticket.OPEN_STATUSES:
             # If current ticket is closed, add it to the queryset
             form.fields["ticket"].queryset = (
-                Ticket.objects.filter(
-                    Q(id=ticket.id) | Q(status__in=Ticket.OPEN_STATUSES)
-                )
+                Ticket.objects.filter(Q(id=ticket.id) | Q(status__in=Ticket.OPEN_STATUSES))
                 .distinct()
                 .order_by("-id")
             )
@@ -411,9 +405,7 @@ def followup_edit(request, ticket_id, followup_id):
                 status__in=Ticket.OPEN_STATUSES
             ).order_by("-id")
 
-        ticketcc_string = return_ticketccstring_and_show_subscribe(
-            request.user, ticket
-        )[0]
+        ticketcc_string = return_ticketccstring_and_show_subscribe(request.user, ticket)[0]
         return render(
             request,
             "helpdesk/followup_edit.html",
@@ -490,8 +482,7 @@ def view_ticket(request, ticket_id):
     except PermissionDenied:
         messages.error(
             request,
-            _("You don't have permission to view ticket - %(ticket)s.")
-            % {"ticket": str(ticket)},
+            _("You don't have permission to view ticket - %(ticket)s.") % {"ticket": str(ticket)},
         )
         return HttpResponseRedirect(reverse("helpdesk:list"))
 
@@ -502,9 +493,7 @@ def view_ticket(request, ticket_id):
     if "subscribe" in request.GET:
         # Allow the user to subscribe him/herself to the ticket whilst viewing
         # it.
-        show_subscribe = return_ticketccstring_and_show_subscribe(request.user, ticket)[
-            1
-        ]
+        show_subscribe = return_ticketccstring_and_show_subscribe(request.user, ticket)[1]
 
         if show_subscribe:
             subscribe_to_ticket_updates(ticket, request.user.id)
@@ -529,9 +518,7 @@ def view_ticket(request, ticket_id):
         initial={"due_date": ticket.due_date},
         queue_choices=extra_context_kwargs["queues"],
     )
-    ticketcc_string, show_subscribe = return_ticketccstring_and_show_subscribe(
-        request.user, ticket
-    )
+    ticketcc_string, show_subscribe = return_ticketccstring_and_show_subscribe(request.user, ticket)
 
     submitter_userprofile = ticket.get_submitter_userprofile()
     if submitter_userprofile is not None:
@@ -722,9 +709,7 @@ def save_ticket_update(form, ticket, user):
     queue = int(form.cleaned_data.get("queue", ticket.queue.id))
 
     # custom fields
-    customfields_form = EditTicketCustomFieldForm(
-        form.cleaned_data or None, instance=ticket
-    )
+    customfields_form = EditTicketCustomFieldForm(form.cleaned_data or None, instance=ticket)
 
     # Check if a change happened on checklists
     new_checklists = {}
@@ -732,9 +717,7 @@ def save_ticket_update(form, ticket, user):
     for checklist in ticket.checklists.all():
         old_completed = set(checklist.tasks.completed().values_list("id", flat=True))
         # Checklists will not be in the cleaned_data so access the submitted data
-        new_checklist = set(
-            map(int, form.data.getlist(f"checklist-{checklist.id}", []))
-        )
+        new_checklist = set(map(int, form.data.getlist(f"checklist-{checklist.id}", [])))
         new_checklists[checklist.id] = new_checklist
         if new_checklist != old_completed:
             changes_in_checklists = True
@@ -880,9 +863,7 @@ def mass_update(request):
             )
             # Send email to Submitter, Owner, Queue CC
             context = safe_template_context(t)
-            context.update(
-                resolution=t.resolution, queue=queue_template_context(t.queue)
-            )
+            context.update(resolution=t.resolution, queue=queue_template_context(t.queue))
 
             messages_sent_to = set()
             try:
@@ -894,10 +875,7 @@ def mass_update(request):
                 "submitter": ("closed_submitter", context),
                 "ticket_cc": ("closed_cc", context),
             }
-            if (
-                t.assigned_to
-                and t.assigned_to.usersettings_helpdesk.email_on_ticket_change
-            ):
+            if t.assigned_to and t.assigned_to.usersettings_helpdesk.email_on_ticket_change:
                 roles["assigned_to"] = ("closed_owner", context)
 
             sent_to = set()
@@ -934,9 +912,7 @@ TICKET_ATTRIBUTES = (
 )
 
 
-def merge_ticket_values(
-    request: WSGIRequest, tickets: list[Ticket], custom_fields
-) -> None:
+def merge_ticket_values(request: WSGIRequest, tickets: list[Ticket], custom_fields) -> None:
     for ticket in tickets:
         ticket.values = {}
         # Prepare the value for each attributes of this ticket
@@ -945,9 +921,7 @@ def merge_ticket_values(
             # Check if attr is a get_FIELD_display
             if attribute.startswith("get_") and attribute.endswith("_display"):
                 # Hack to call methods like get_FIELD_display()
-                value = getattr(
-                    ticket, attribute, TicketCustomFieldValue.default_value
-                )()
+                value = getattr(ticket, attribute, TicketCustomFieldValue.default_value)()
             ticket.values[attribute] = {
                 "value": value,
                 "checked": str(ticket.id) == request.POST.get(attribute),
@@ -996,18 +970,14 @@ def redirect_from_chosen_ticket(
             # Check if the value for this ticket custom field
             # exists
             try:
-                value = selected_ticket.ticketcustomfieldvalue_set.get(
-                    field=custom_field
-                ).value
+                value = selected_ticket.ticketcustomfieldvalue_set.get(field=custom_field).value
             except TicketCustomFieldValue.DoesNotExist:
                 continue
 
             # Create the custom field value or update it with the
             # value from the selected ticket
-            custom_field_value, created = (
-                chosen_ticket.ticketcustomfieldvalue_set.get_or_create(
-                    field=custom_field, defaults={"value": value}
-                )
+            custom_field_value, created = chosen_ticket.ticketcustomfieldvalue_set.get_or_create(
+                field=custom_field, defaults={"value": value}
             )
             if not created:
                 custom_field_value.value = value
@@ -1030,10 +1000,7 @@ def redirect_from_chosen_ticket(
                 template_name="merged",
                 context=context,
                 recipients=[ticket.submitter_email],
-                bcc=[
-                    cc.email_address
-                    for cc in ticket.ticketcc_set.select_related("user")
-                ],
+                bcc=[cc.email_address for cc in ticket.ticketcc_set.select_related("user")],
                 sender=ticket.queue.from_address,
                 fail_silently=True,
             )
@@ -1043,17 +1010,14 @@ def redirect_from_chosen_ticket(
         ticket.followup_set.update(
             ticket=chosen_ticket,
             # Next might exceed maximum 200 characters limit
-            title=_("[Merged from #%(id)d] %(title)s")
-            % {"id": ticket.id, "title": ticket.title},
+            title=_("[Merged from #%(id)d] %(title)s") % {"id": ticket.id, "title": ticket.title},
         )
 
         # Add submitter_email, assigned_to email and ticketcc to
         # chosen ticket if necessary
         chosen_ticket.add_email_to_ticketcc_if_not_in(email=ticket.submitter_email)
         if ticket.assigned_to and ticket.assigned_to.email:
-            chosen_ticket.add_email_to_ticketcc_if_not_in(
-                email=ticket.assigned_to.email
-            )
+            chosen_ticket.add_email_to_ticketcc_if_not_in(email=ticket.assigned_to.email)
         for ticketcc in ticket.ticketcc_set.all():
             chosen_ticket.add_email_to_ticketcc_if_not_in(ticketcc=ticketcc)
     return redirect(chosen_ticket)
@@ -1088,14 +1052,10 @@ def merge_tickets(request):
             except Ticket.DoesNotExist:
                 ticket_select_form.add_error(
                     field="tickets",
-                    error=_(
-                        "Please choose a ticket in which the others will be merged into."
-                    ),
+                    error=_("Please choose a ticket in which the others will be merged into."),
                 )
             else:
-                return redirect_from_chosen_ticket(
-                    request, chosen_ticket, tickets, custom_fields
-                )
+                return redirect_from_chosen_ticket(request, chosen_ticket, tickets, custom_fields)
 
     return render(
         request,
@@ -1271,9 +1231,7 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
 
     urlsafe_query = query_to_base64(query_params)
 
-    user_saved_queries = SavedSearch.objects.filter(
-        Q(user=request.user) | Q(shared__exact=True)
-    )
+    user_saved_queries = SavedSearch.objects.filter(Q(user=request.user) | Q(shared__exact=True))
 
     # CSV export of the currently filtered ticket list (bypass pagination)
     if request.GET.get("export") == "csv":
@@ -1289,16 +1247,18 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         writer = csv.writer(response)
 
         # Header row
-        writer.writerow([
-            "ID",
-            "Title",
-            "Status",
-            "Priority",
-            "Queue",
-            "Assigned To",
-            "Submitter Email",
-            "Created",
-        ])
+        writer.writerow(
+            [
+                "ID",
+                "Title",
+                "Status",
+                "Priority",
+                "Queue",
+                "Assigned To",
+                "Submitter Email",
+                "Created",
+            ]
+        )
 
         for ticket in tickets_qs:
             # Safe attribute access for related objects
@@ -1315,22 +1275,20 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
                 if hasattr(ticket, "get_priority_display")
                 else ticket.priority
             )
-            created = (
-                ticket.created.isoformat()
-                if getattr(ticket, "created", None)
-                else ""
-            )
+            created = ticket.created.isoformat() if getattr(ticket, "created", None) else ""
 
-            writer.writerow([
-                ticket.id,
-                ticket.title,
-                status,
-                priority,
-                queue_str,
-                assigned_str,
-                ticket.submitter_email if getattr(ticket, "submitter_email", None) else "",
-                created,
-            ])
+            writer.writerow(
+                [
+                    ticket.id,
+                    ticket.title,
+                    status,
+                    priority,
+                    queue_str,
+                    assigned_str,
+                    ticket.submitter_email if getattr(ticket, "submitter_email", None) else "",
+                    created,
+                ]
+            )
 
         return response
 
@@ -1390,8 +1348,7 @@ def load_saved_query(request, query_params=None):
     if request.GET.get("saved_query", None):
         try:
             saved_query = SavedSearch.objects.get(
-                Q(pk=request.GET.get("saved_query"))
-                & (Q(shared=True) | Q(user=request.user))
+                Q(pk=request.GET.get("saved_query")) & (Q(shared=True) | Q(user=request.user))
             )
         except (SavedSearch.DoesNotExist, ValueError):
             raise QueryLoadError()
@@ -1449,9 +1406,7 @@ def edit_ticket(request, ticket_id):
 edit_ticket = staff_member_required(edit_ticket)
 
 
-class CreateTicketView(
-    MustBeStaffMixin, abstract_views.AbstractCreateTicketMixin, FormView
-):
+class CreateTicketView(MustBeStaffMixin, abstract_views.AbstractCreateTicketMixin, FormView):
     template_name = "helpdesk/create_ticket.html"
     form_class = TicketForm
 
@@ -1478,9 +1433,7 @@ class CreateTicketView(
             return reverse("helpdesk:dashboard")
 
 
-class UpdateTicketView(
-    MustBeStaffMixin, abstract_views.AbstractCreateTicketMixin, UpdateView
-):
+class UpdateTicketView(MustBeStaffMixin, abstract_views.AbstractCreateTicketMixin, UpdateView):
     template_name = "helpdesk/ticket.html"
     form_class = TicketForm
 
@@ -1529,9 +1482,7 @@ class UpdateTicketView(
     def form_valid(self, form):
         ticket_id = self.kwargs["ticket_id"]
         try:
-            self.ticket = get_ticket_from_request_with_authorisation(
-                self.request, ticket_id, False
-            )
+            self.ticket = get_ticket_from_request_with_authorisation(self.request, ticket_id, False)
         except PermissionDenied:
             return redirect_to_login(self.request.path, "helpdesk:login")
         # Avoid calling super as it will call the save() method on the form
@@ -1746,8 +1697,8 @@ def update_summary_tables(report_queryset, report, summarytable, summarytable2):
 
 @helpdesk_staff_member_required
 def run_report(request, report):
-    report_queryset, query_params, saved_query, redirect = (
-        get_report_queryset_or_redirect(request, report)
+    report_queryset, query_params, saved_query, redirect = get_report_queryset_or_redirect(
+        request, report
     )
     if redirect:
         return redirect
@@ -1911,14 +1862,10 @@ def save_query(request):
     if not title or not query_encoded:
         return HttpResponseRedirect(reverse("helpdesk:list"))
 
-    query = SavedSearch(
-        title=title, shared=shared, query=query_encoded, user=request.user
-    )
+    query = SavedSearch(title=title, shared=shared, query=query_encoded, user=request.user)
     query.save()
 
-    return HttpResponseRedirect(
-        "{}?saved_query={}".format(reverse("helpdesk:list"), query.id)
-    )
+    return HttpResponseRedirect("{}?saved_query={}".format(reverse("helpdesk:list"), query.id))
 
 
 save_query = staff_member_required(save_query)
@@ -1932,9 +1879,7 @@ def delete_saved_query(request, pk):
         query.delete()
         return HttpResponseRedirect(reverse("helpdesk:list"))
     else:
-        return render(
-            request, "helpdesk/confirm_delete_saved_query.html", {"query": query}
-        )
+        return render(request, "helpdesk/confirm_delete_saved_query.html", {"query": query})
 
 
 delete_saved_query = staff_member_required(delete_saved_query)
@@ -2026,9 +1971,7 @@ def ticket_cc_add(request, ticket_id):
             if user and ticket.ticketcc_set.filter(user=user).exists():
                 form.add_error("user", _("Impossible to add twice the same user"))
             elif email and ticket.ticketcc_set.filter(email=email).exists():
-                form.add_error(
-                    "email", _("Impossible to add twice the same email address")
-                )
+                form.add_error("email", _("Impossible to add twice the same email address"))
             else:
                 ticketcc = form.save(commit=False)
                 ticketcc.ticket = ticket
@@ -2101,15 +2044,11 @@ ticket_dependency_add = staff_member_required(ticket_dependency_add)
 def ticket_dependency_del(request, ticket_id, dependency_id):
     ticket = get_object_or_404(Ticket, id=ticket_id)
     ticket_perm_check(request, ticket)
-    dependency = get_object_or_404(
-        TicketDependency, ticket__id=ticket_id, id=dependency_id
-    )
+    dependency = get_object_or_404(TicketDependency, ticket__id=ticket_id, id=dependency_id)
     if request.method == "POST":
         dependency.delete()
         return HttpResponseRedirect(reverse("helpdesk:view", args=[ticket_id]))
-    return render(
-        request, "helpdesk/ticket_dependency_del.html", {"dependency": dependency}
-    )
+    return render(request, "helpdesk/ticket_dependency_del.html", {"dependency": dependency})
 
 
 ticket_dependency_del = staff_member_required(ticket_dependency_del)
@@ -2146,16 +2085,12 @@ ticket_resolves_add = staff_member_required(ticket_resolves_add)
 def ticket_resolves_del(request, ticket_id, dependency_id):
     ticket = get_object_or_404(Ticket, id=ticket_id)
     ticket_perm_check(request, ticket)
-    dependency = get_object_or_404(
-        TicketDependency, ticket__id=ticket_id, id=dependency_id
-    )
+    dependency = get_object_or_404(TicketDependency, ticket__id=ticket_id, id=dependency_id)
     depends_on_id = dependency.depends_on.id
     if request.method == "POST":
         dependency.delete()
         return HttpResponseRedirect(reverse("helpdesk:view", args=[depends_on_id]))
-    return render(
-        request, "helpdesk/ticket_dependency_del.html", {"dependency": dependency}
-    )
+    return render(request, "helpdesk/ticket_dependency_del.html", {"dependency": dependency})
 
 
 ticket_resolves_del = staff_member_required(ticket_resolves_del)
@@ -2179,9 +2114,7 @@ def attachment_preview(request, ticket_id, attachment_id):
     ticket = get_object_or_404(Ticket, id=ticket_id)
     ticket_perm_check(request, ticket)
 
-    attachment = get_object_or_404(
-        FollowUpAttachment, id=attachment_id, followup__ticket=ticket
-    )
+    attachment = get_object_or_404(FollowUpAttachment, id=attachment_id, followup__ticket=ticket)
     if attachment.mime_type != "text/html":
         raise Http404("This attachment has no HTML rendering.")
 
@@ -2216,9 +2149,7 @@ def attachment_del(request, ticket_id, attachment_id):
     ticket = get_object_or_404(Ticket, id=ticket_id)
     ticket_perm_check(request, ticket)
 
-    attachment = get_object_or_404(
-        FollowUpAttachment, id=attachment_id, followup__ticket=ticket
-    )
+    attachment = get_object_or_404(FollowUpAttachment, id=attachment_id, followup__ticket=ticket)
     if request.method == "POST":
         attachment.delete()
         return HttpResponseRedirect(reverse("helpdesk:view", args=[ticket_id]))
@@ -2266,9 +2197,7 @@ def calc_basic_ticket_stats(Tickets):
     N_ota_le_30 = len(ota_le_30)
 
     # >= 30 & <= 60
-    ota_le_60_ge_30 = all_open_tickets.filter(
-        created__gte=date_60_str, created__lte=date_30_str
-    )
+    ota_le_60_ge_30 = all_open_tickets.filter(created__gte=date_60_str, created__lte=date_30_str)
     N_ota_le_60_ge_30 = len(ota_le_60_ge_30)
 
     # >= 60
@@ -2310,8 +2239,8 @@ def calc_basic_ticket_stats(Tickets):
     )
     # all closed tickets that were opened in the last 60 days.
     all_closed_last_60_days = all_closed_tickets.filter(created__gte=date_60_str)
-    average_nbr_days_until_ticket_closed_last_60_days = (
-        calc_average_nbr_days_until_ticket_resolved(all_closed_last_60_days)
+    average_nbr_days_until_ticket_closed_last_60_days = calc_average_nbr_days_until_ticket_resolved(
+        all_closed_last_60_days
     )
 
     # put together basic stats
@@ -2351,9 +2280,7 @@ def sort_string(begin, end):
 def checklist_templates(request, checklist_template_id=None):
     checklist_template = None
     if checklist_template_id:
-        checklist_template = get_object_or_404(
-            ChecklistTemplate, id=checklist_template_id
-        )
+        checklist_template = get_object_or_404(ChecklistTemplate, id=checklist_template_id)
     form = ChecklistTemplateForm(request.POST or None, instance=checklist_template)
     if form.is_valid():
         form.save()
@@ -2419,22 +2346,14 @@ def kanban_board(request):
     if due_weeks:
         cutoff = now + timedelta(weeks=due_weeks)
         upcoming_q = Q(due_date__isnull=False, due_date__gte=now, due_date__lte=cutoff)
-        overdue_q = Q(
-            due_date__isnull=False, due_date__lt=now, status__in=Ticket.OPEN_STATUSES
-        )
-        tickets = tickets.filter(
-            upcoming_q if exclude_overdue else upcoming_q | overdue_q
-        )
+        overdue_q = Q(due_date__isnull=False, due_date__lt=now, status__in=Ticket.OPEN_STATUSES)
+        tickets = tickets.filter(upcoming_q if exclude_overdue else upcoming_q | overdue_q)
 
-    closed_weeks = (
-        helpdesk_settings.HELPDESK_KANBAN_DEFAULT_RENDER_CLOSED_TICKETS_WEEKS or None
-    )
+    closed_weeks = helpdesk_settings.HELPDESK_KANBAN_DEFAULT_RENDER_CLOSED_TICKETS_WEEKS or None
     if closed_weeks:
         closed_cutoff = now - timedelta(weeks=closed_weeks)
         closed_statuses = [Ticket.CLOSED_STATUS, Ticket.DUPLICATE_STATUS]
-        tickets = tickets.exclude(
-            status__in=closed_statuses, modified__lt=closed_cutoff
-        )
+        tickets = tickets.exclude(status__in=closed_statuses, modified__lt=closed_cutoff)
 
     tickets = tickets.order_by(F("due_date").asc(nulls_last=True), "-modified")
 

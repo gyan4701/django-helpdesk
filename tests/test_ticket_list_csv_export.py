@@ -34,7 +34,9 @@ class TicketListCSVExportTests(TestCase):
         }
         self.encoded_query = query_to_base64(self.default_params)
 
-    def test_requesting_list_with_export_csv_returns_csv_and_attachment_and_contains_ticket(self):
+    def test_requesting_list_with_export_csv_returns_csv_and_attachment_and_contains_ticket(
+        self,
+    ):
         # Arrange
         self.client.force_login(self.staff_user)
 
