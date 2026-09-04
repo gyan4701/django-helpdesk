@@ -3,6 +3,7 @@ from http import HTTPStatus
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+
 from helpdesk.models import Queue, Ticket
 from helpdesk.query import query_to_base64
 
