@@ -1489,12 +1489,60 @@ def raw_details(request, type_):
     if type_ not in ("preset",):
         raise Http404
 
+    # If asked for a specific preset id return the body
     if type_ == "preset" and request.GET.get("id", False):
         try:
             preset = PreSetReply.objects.get(id=request.GET.get("id"))
             return HttpResponse(preset.body)
         except PreSetReply.DoesNotExist:
             raise Http404
+
+    # Allow staff UI to create a new PreSetReply via POST
+    if request.method == "POST" and request.POST.get("action") == "create":
+        # Basic fields
+        name = (request.POST.get("name", "") or "").strip()
+        body = (request.POST.get("body", "") or "").strip()
+
+        # Gather queues - support multiple values (getlist) or a single
+        queues = request.POST.getlist("queues")
+        if not queues:
+            queues_str = request.POST.get("queues", "")
+            if queues_str:
+                queues = [q.strip() for q in queues_str.split(",") if q.strip()]
+
+        try:
+            queue_ids = [int(q) for q in queues] if queues else []
+        except ValueError:
+            return HttpResponse("Invalid queue ids", status=400)
+
+        # Validate that all requested queues are within user's accessible queues
+        huser = HelpdeskUser(request.user)
+        accessible_qs = huser.get_queues()
+        accessible_ids = set(accessible_qs.values_list("pk", flat=True))
+        if any(qid not in accessible_ids for qid in queue_ids):
+            return HttpResponse("One or more queues are not accessible", status=403)
+
+        # Create the preset reply and attach queues (if any). Leaving queues
+        # blank allows the preset to be used for all queues.
+        preset = PreSetReply(name=name, body=body)
+        preset.save()
+        if queue_ids:
+            # set() accepts a list of PKs
+            preset.queues.set(queue_ids)
+
+        return HttpResponse(str(preset.id), status=201)
+
+    # Return a plain-text list of presets visible to the current staff user
+    if type_ == "preset":
+        huser = HelpdeskUser(request.user)
+        accessible_qs = huser.get_queues()
+        presets = PreSetReply.objects.filter(
+            Q(queues__in=accessible_qs) | Q(queues__isnull=True)
+        ).distinct()
+        lines = []
+        for p in presets:
+            lines.append(f"{p.id}:{p.name}")
+        return HttpResponse("\n".join(lines))
 
     raise Http404
 
