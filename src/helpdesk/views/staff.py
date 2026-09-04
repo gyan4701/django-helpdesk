@@ -1324,7 +1324,16 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
 
         # Build a Query object using the same base64 query we've generated for the page
         qobj = Query(HelpdeskUser(request.user), base64query=urlsafe_query)
-        queryset = qobj.get()
+
+        # Use the full filtered queryset (not any paginated/sliced page) so the
+        # CSV contains every ticket that matches the current filters and user
+        # permissions. To avoid per-row N+1 queries when rendering related
+        # attributes (queue, assigned_to), select_related them here. For large
+        # resultsets we use QuerySet.iterator() to avoid caching the whole
+        # resultset in memory; this streams rows from the DB. Beware that
+        # iterator() disables queryset caching and may affect DB transaction
+        # semantics if used inside a transaction.
+        queryset = qobj.get().select_related("queue", "assigned_to")
 
         def _safe_cell(val):
             """Convert a value to a string suitable for CSV and mitigate CSV-injection.
@@ -1360,7 +1369,10 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
             ]
         )
 
-        for ticket in queryset:
+        # Use iterator() to stream results for large sets and avoid building a
+        # giant list in memory. select_related above avoids N+1 queries when
+        # accessing ticket.queue and ticket.assigned_to.
+        for ticket in queryset.iterator():
             writer.writerow(
                 [
                     _safe_cell(ticket.id),
