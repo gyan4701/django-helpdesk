@@ -54,7 +54,14 @@ class DirectTemplateView(TemplateView):
 app_name = "helpdesk"
 
 base64_pattern = r"(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
-urlpatterns = []
+urlpatterns = [
+    path(
+        "staff/presetreplies/",
+        staff.raw_details,
+        {"type_": "presetreplies"},
+        name="presetreplies",
+    ),
+]
 
 if helpdesk_settings.HELPDESK_UI_ENABLED:
     urlpatterns += [
