@@ -60,6 +60,7 @@ if helpdesk_settings.HELPDESK_UI_ENABLED:
     urlpatterns += [
         path("dashboard/", staff.dashboard, name="dashboard"),
         path("tickets/", staff.ticket_list, name="list"),
+        path("tickets/export/csv/", staff.ticket_list, name="export_csv"),
         path("tickets/update/", staff.mass_update, name="mass_update"),
         path("tickets/merge", staff.merge_tickets, name="merge_tickets"),
         path("tickets/<int:ticket_id>/", staff.view_ticket, name="view"),
