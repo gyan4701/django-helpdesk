@@ -3,10 +3,8 @@ from http import HTTPStatus
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
-
 from helpdesk.models import Queue, Ticket
 from helpdesk.query import query_to_base64
-
 
 User = get_user_model()
 
@@ -45,7 +43,7 @@ class TicketListCSVExportTests(TestCase):
         # Assert: status and content type
         self.assertEqual(r.status_code, HTTPStatus.OK)
         # Content-Type may include charset; ensure text/csv present
-        self.assertIn("text/csv", r["Content-Type"]) 
+        self.assertIn("text/csv", r["Content-Type"])
 
         # Content-Disposition should indicate attachment filename
         content_disposition = r.get("Content-Disposition", "")
