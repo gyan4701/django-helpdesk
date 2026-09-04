@@ -1373,6 +1373,101 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
             )
         return response
 
+    if request.GET.get("format") == "csv":
+        import csv
+        from datetime import date, datetime
+        from io import StringIO
+
+        from helpdesk.lib import convert_value
+
+        def _sanitize(value):
+            """Convert values to strings, format dates, and mitigate CSV-injection.
+
+            Values starting with one of = + - @ get prefixed with a single quote to
+            prevent spreadsheet formula execution. None becomes an empty string.
+            """
+            if value is None:
+                return ""
+            if isinstance(value, (date, datetime)):
+                return convert_value(value)
+            s = str(value)
+            if s and s[0] in ("=", "+", "-", "@"):
+                s = "'" + s
+            return s
+
+        # Build queryset according to filters and staff permissions
+        tickets_qs = Ticket.objects.all()
+
+        # Restrict to accessible queues where possible
+        queues = huser.get_queues()
+        accessible_queue_ids = None
+        if queues:
+            first = queues[0]
+            if hasattr(first, "pk"):
+                accessible_queue_ids = [q.pk for q in queues]
+            elif isinstance(first, (list, tuple)):
+                accessible_queue_ids = [q[0] for q in queues]
+        if accessible_queue_ids:
+            tickets_qs = tickets_qs.filter(queue__id__in=accessible_queue_ids)
+
+        # Apply filtering dict produced earlier
+        if query_params.get("filtering"):
+            tickets_qs = tickets_qs.filter(**query_params["filtering"])
+
+        # Apply any explicit null filters
+        for key in query_params.get("filtering_null", {}):
+            tickets_qs = tickets_qs.filter(**{key: True})
+
+        # Apply simple keyword search to common text fields if present
+        search = query_params.get("search_string", "")
+        if search:
+            tickets_qs = tickets_qs.filter(
+                Q(title__icontains=search)
+                | Q(description__icontains=search)
+                | Q(submitter_email__icontains=search)
+            )
+
+        # Apply sorting
+        sorting = query_params.get("sorting") or "created"
+        sortreverse = query_params.get("sortreverse")
+        if sorting in ALLOWED_SORTS:
+            order = "-" + sorting if sortreverse else sorting
+            tickets_qs = tickets_qs.order_by(order)
+
+        # Prepare CSV with exact header order required and robust quoting
+        sio = StringIO()
+        writer = csv.writer(sio, quoting=csv.QUOTE_ALL)
+        header = [
+            "ticket id",
+            "title",
+            "status",
+            "priority",
+            "queue",
+            "assignee",
+            "submitter email",
+            "creation date",
+        ]
+        writer.writerow(header)
+
+        for t in tickets_qs:
+            row = [
+                _sanitize(t.id),
+                _sanitize(t.title),
+                _sanitize(t.get_status()),
+                _sanitize(t.priority),
+                _sanitize(
+                    getattr(t.queue, "name", getattr(t.queue, "slug", str(t.queue)))
+                ),
+                _sanitize(t.get_assigned_to),
+                _sanitize(t.submitter_email),
+                _sanitize(t.created),
+            ]
+            writer.writerow(row)
+
+        resp = HttpResponse(sio.getvalue(), content_type="text/csv; charset=utf-8")
+        resp["Content-Disposition"] = 'attachment; filename="tickets.csv"'
+        return resp
+
     return render(request, "helpdesk/ticket_list.html", ctx)
 
 
