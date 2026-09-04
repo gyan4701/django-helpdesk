@@ -1266,8 +1266,15 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         # SORTING
         sort = request.GET.get("sort", None)
         sortreverse = request.GET.get("sortreverse", None)
+        # Normalise sortreverse to a boolean so that string values like "false"
+        # (which are truthy) do not incorrectly trigger reverse sorting when
+        # the query is later reconstituted via query_from_base64().
+        if isinstance(sortreverse, str):
+            sortreverse_norm = sortreverse.lower() in ("1", "true", "yes", "on")
+        else:
+            sortreverse_norm = bool(sortreverse)
         query_params["sorting"] = sort if sort in ALLOWED_SORTS else "created"
-        query_params["sortreverse"] = sortreverse
+        query_params["sortreverse"] = sortreverse_norm
 
     urlsafe_query = query_to_base64(query_params)
 
