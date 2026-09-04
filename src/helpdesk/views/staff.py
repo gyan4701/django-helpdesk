@@ -1489,12 +1489,94 @@ def raw_details(request, type_):
     if type_ not in ("preset",):
         raise Http404
 
+    # Allow creation of a PreSetReply from staff UI via POST with action=create
+    if request.method == "POST" and request.POST.get("action") == "create":
+        # Local imports to satisfy import-sorting and avoid top-level changes
+        from django.db.models import Q
+        from django.http import HttpResponseBadRequest, JsonResponse
+
+        name = (request.POST.get("name") or "").strip()
+        body = (request.POST.get("body") or "").strip()
+
+        # Accept multiple queue ids via standard POST lists or comma-separated string
+        queue_ids = request.POST.getlist("queues")
+        if not queue_ids:
+            qstr = request.POST.get("queues", "")
+            if qstr:
+                queue_ids = [s.strip() for s in qstr.split(",") if s.strip()]
+
+        try:
+            queue_ids_int = [int(q) for q in queue_ids if q != ""]
+        except ValueError:
+            return HttpResponseBadRequest("Invalid queue ids")
+
+        if not name or not body:
+            return HttpResponseBadRequest("Missing name or body")
+
+        # Validate that all selected queues are within the staff user's accessible queues
+        accessible_qs = get_user_queues(request.user)
+        accessible_ids = set(accessible_qs.values_list("id", flat=True))
+
+        if queue_ids_int:
+            invalid = [qid for qid in queue_ids_int if qid not in accessible_ids]
+            if invalid:
+                return JsonResponse(
+                    {
+                        "error": "One or more selected queues are not accessible",
+                        "invalid_queues": invalid,
+                    },
+                    status=403,
+                )
+
+        # Create the preset and attach queues (empty means global reply)
+        preset = PreSetReply.objects.create(name=name, body=body)
+        if queue_ids_int:
+            preset.queues.set(queue_ids_int)
+        else:
+            preset.queues.clear()
+        preset.save()
+
+        return JsonResponse(
+            {
+                "id": preset.id,
+                "name": preset.name,
+                "body": preset.body,
+                "queues": list(preset.queues.values_list("id", flat=True)),
+            }
+        )
+
+    # Return body for a single preset (existing behaviour)
     if type_ == "preset" and request.GET.get("id", False):
         try:
             preset = PreSetReply.objects.get(id=request.GET.get("id"))
             return HttpResponse(preset.body)
         except PreSetReply.DoesNotExist:
             raise Http404
+
+    # Return list of presets visible to this staff user (used by UI to refresh available presets)
+    if type_ == "preset" and request.method == "GET" and request.GET.get("list", False):
+        from django.db.models import Q
+        from django.http import JsonResponse
+
+        accessible_qs = get_user_queues(request.user)
+        presets = (
+            PreSetReply.objects.filter(
+                Q(queues__in=accessible_qs) | Q(queues__isnull=True)
+            )
+            .distinct()
+            .order_by("name")
+        )
+
+        data = [
+            {
+                "id": p.id,
+                "name": p.name,
+                "body": p.body,
+                "queues": list(p.queues.values_list("id", flat=True)),
+            }
+            for p in presets
+        ]
+        return JsonResponse({"presets": data})
 
     raise Http404
 
