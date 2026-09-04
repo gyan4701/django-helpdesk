@@ -1326,49 +1326,75 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         qobj = Query(HelpdeskUser(request.user), base64query=urlsafe_query)
         queryset = qobj.get()
 
+        def _safe_cell(val):
+            """Convert a value to a string suitable for CSV and mitigate CSV-injection.
+
+            - None -> empty string
+            - prefix leading = + - @ with an apostrophe to mitigate spreadsheet formulas
+            - return string otherwise
+            """
+            if val is None:
+                return ""
+            s = str(val)
+            if s and s[0] in ("=", "+", "-", "@"):
+                s = "'" + s
+            return s
+
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = 'attachment; filename="tickets.csv"'
 
-        writer = csv.writer(response)
-        # Header row
+        # Use csv.writer with QUOTE_ALL to ensure commas, quotes and newlines are safely contained
+        writer = csv.writer(response, quoting=csv.QUOTE_ALL)
+
+        # Exact header required by the story (order must match)
         writer.writerow(
             [
-                "id",
+                "ticket id",
                 "title",
-                "queue",
                 "status",
                 "priority",
-                "assigned_to",
-                "submitter_email",
-                "created",
-                "updated",
-                "due_date",
+                "queue",
+                "assignee",
+                "submitter email",
+                "creation date",
             ]
         )
 
         for ticket in queryset:
             writer.writerow(
                 [
-                    ticket.id,
-                    ticket.title,
-                    str(ticket.queue) if ticket.queue is not None else "",
-                    ticket.get_status_display()
-                    if hasattr(ticket, "get_status_display")
-                    else (ticket.status if hasattr(ticket, "status") else ""),
-                    ticket.get_priority_display()
-                    if hasattr(ticket, "get_priority_display")
-                    else (ticket.priority if hasattr(ticket, "priority") else ""),
-                    str(ticket.assigned_to) if ticket.assigned_to is not None else "",
-                    ticket.submitter_email or "",
-                    ticket.created.isoformat()
-                    if getattr(ticket, "created", None) is not None
-                    else "",
-                    ticket.updated.isoformat()
-                    if getattr(ticket, "updated", None) is not None
-                    else "",
-                    ticket.due_date.isoformat()
-                    if getattr(ticket, "due_date", None) is not None
-                    else "",
+                    _safe_cell(ticket.id),
+                    _safe_cell(ticket.title),
+                    _safe_cell(
+                        ticket.get_status()
+                        if hasattr(ticket, "get_status")
+                        else (
+                            ticket.get_status_display()
+                            if hasattr(ticket, "get_status_display")
+                            else (ticket.status if hasattr(ticket, "status") else "")
+                        )
+                    ),
+                    _safe_cell(
+                        ticket.get_priority_display()
+                        if hasattr(ticket, "get_priority_display")
+                        else (ticket.priority if hasattr(ticket, "priority") else "")
+                    ),
+                    _safe_cell(str(ticket.queue) if ticket.queue is not None else ""),
+                    _safe_cell(
+                        ticket.get_assigned_to
+                        if hasattr(ticket, "get_assigned_to")
+                        else (
+                            str(ticket.assigned_to)
+                            if ticket.assigned_to is not None
+                            else ""
+                        )
+                    ),
+                    _safe_cell(ticket.submitter_email or ""),
+                    _safe_cell(
+                        ticket.created.isoformat()
+                        if getattr(ticket, "created", None) is not None
+                        else ""
+                    ),
                 ]
             )
         return response
