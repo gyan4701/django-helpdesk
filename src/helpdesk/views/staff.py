@@ -1373,6 +1373,75 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
             )
         return response
 
+    # If CSV export requested, return CSV
+    if request.GET.get("export") == "csv" or request.GET.get("format") == "csv":
+        import csv
+        import io
+
+        def _safe_cell(value):
+            """Convert value to string, ensure empty for None and mitigate CSV-injection.
+
+            Prefix a single quote if the text begins with one of the characters
+            that spreadsheet software may interpret as a formula: =, +, - or @.
+            """
+            if value is None:
+                s = ""
+            else:
+                s = str(value)
+            if s and s[0] in ("=", "+", "-", "@"):
+                s = "'" + s
+            return s
+
+        # Build queryset respecting user's queues (permissions) and applied filters
+        qs = Ticket.objects.filter(queue__in=huser.get_queues())
+        for k, v in query_params.get("filtering", {}).items():
+            if v is not None:
+                qs = qs.filter(**{k: v})
+        for k, v in query_params.get("filtering_null", {}).items():
+            if v:
+                qs = qs.filter(**{k: True})
+
+        # Apply sorting if present
+        sort = query_params.get("sorting")
+        sortreverse = query_params.get("sortreverse")
+        if sort:
+            order = f"-{sort}" if sortreverse else sort
+            qs = qs.order_by(order)
+
+        output = io.StringIO()
+        writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+        # Exact required header order
+        writer.writerow(
+            [
+                "ticket id",
+                "title",
+                "status",
+                "priority",
+                "queue",
+                "assignee",
+                "submitter email",
+                "creation date",
+            ]
+        )
+
+        for ticket in qs:
+            writer.writerow(
+                [
+                    _safe_cell(ticket.id),
+                    _safe_cell(ticket.title),
+                    _safe_cell(ticket.get_status()),
+                    _safe_cell(ticket.get_priority_display()),
+                    _safe_cell(str(ticket.queue)),
+                    _safe_cell(ticket.get_assigned_to),
+                    _safe_cell(ticket.submitter_email),
+                    _safe_cell(ticket.created.isoformat(sep=" ")),
+                ]
+            )
+
+        resp = HttpResponse(output.getvalue(), content_type="text/csv")
+        resp["Content-Disposition"] = 'attachment; filename="helpdesk-tickets.csv"'
+        return resp
+
     return render(request, "helpdesk/ticket_list.html", ctx)
 
 
