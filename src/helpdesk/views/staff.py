@@ -1499,6 +1499,112 @@ def raw_details(request, type_):
     raise Http404
 
 
+@helpdesk_staff_member_required
+def preset_list(request):
+    """List pre-set replies visible to the current staff user.
+
+    Shows global presets (no queues) and presets scoped to queues the user
+    can access.
+    """
+    presets = PreSetReply.objects.all()
+    huser = HelpdeskUser(request.user)
+    visible = []
+    for p in presets:
+        qs = list(p.queues.all())
+        # Global reply
+        if not qs:
+            visible.append(p)
+            continue
+        # If the user can access any queue the reply is scoped to, include it
+        if any(huser.can_access_queue(q) for q in qs):
+            visible.append(p)
+    return render(request, "helpdesk/preset_list.html", {"presets": visible})
+
+
+@helpdesk_staff_member_required
+def preset_edit(request, preset_id=None):
+    """Create or edit a pre-set reply.
+
+    Enforces that editing is only allowed for replies the user can access
+    (scoped queues) and populates audit fields on save if present on the
+    model (e.g., created_by/updated_by).
+    """
+    if preset_id:
+        try:
+            preset = PreSetReply.objects.get(id=preset_id)
+        except PreSetReply.DoesNotExist:
+            raise Http404
+        # If preset is scoped to queues, require access to at least one of them
+        if preset.queues.exists():
+            if not any(
+                HelpdeskUser(request.user).can_access_queue(q)
+                for q in preset.queues.all()
+            ):
+                return HttpResponseRedirect(reverse("helpdesk:list"))
+    else:
+        preset = PreSetReply()
+
+    # Import the form from existing forms logic - keeps validation consistent
+    from helpdesk.forms import PreSetReplyForm
+
+    if request.method == "POST":
+        form = PreSetReplyForm(request.POST, instance=preset)
+        if form.is_valid():
+            preset = form.save(commit=False)
+            # Populate audit fields if they exist on the model
+            if hasattr(preset, "created_by") and not getattr(
+                preset, "created_by", None
+            ):
+                try:
+                    setattr(preset, "created_by", request.user)
+                except Exception:
+                    # Best-effort: if this fails for an unexpected field type, ignore
+                    pass
+            if hasattr(preset, "updated_by"):
+                try:
+                    setattr(preset, "updated_by", request.user)
+                except Exception:
+                    pass
+            preset.save()
+            # m2m fields saved after initial save
+            try:
+                form.save_m2m()
+            except Exception:
+                pass
+            return HttpResponseRedirect(reverse("helpdesk:preset_list"))
+    else:
+        form = PreSetReplyForm(instance=preset)
+
+    return render(
+        request, "helpdesk/preset_form.html", {"form": form, "preset": preset}
+    )
+
+
+@helpdesk_staff_member_required
+def preset_delete(request, preset_id):
+    """Delete a pre-set reply after confirmation.
+
+    Deletion is only allowed if the user can access at least one of the
+    queues mapped on the preset (or if it's global).
+    """
+    try:
+        preset = PreSetReply.objects.get(id=preset_id)
+    except PreSetReply.DoesNotExist:
+        raise Http404
+
+    if preset.queues.exists():
+        if not any(
+            HelpdeskUser(request.user).can_access_queue(q) for q in preset.queues.all()
+        ):
+            return HttpResponseRedirect(reverse("helpdesk:list"))
+
+    if request.method == "POST":
+        preset.delete()
+        return HttpResponseRedirect(reverse("helpdesk:preset_list"))
+
+    return render(request, "helpdesk/preset_confirm_delete.html", {"preset": preset})
+
+
 raw_details = staff_member_required(raw_details)
 
 

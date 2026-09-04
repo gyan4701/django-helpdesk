@@ -1,0 +1,20 @@
+{% extends "helpdesk/base.html" %}
+{% load i18n %}
+
+{% block helpdesk_title %}{% translate "Delete Pre-set Reply" %}{% endblock helpdesk_title %}
+
+{% block helpdesk_breadcrumb %}
+  <li class="breadcrumb-item"><a href="{% url 'helpdesk:list' %}">{% translate "Tickets" %}</a></li>
+  <li class="breadcrumb-item"><a href="{% url 'helpdesk:preset_list' %}">{% translate "Pre-set Replies" %}</a></li>
+  <li class="breadcrumb-item active" aria-current="page">{% translate "Delete" %}</li>
+{% endblock helpdesk_breadcrumb %}
+
+{% block helpdesk_body %}
+  <h1 class="h3">{% translate "Delete Pre-set Reply" %}</h1>
+  <p>{% translate "Are you sure you want to delete the pre-set reply" %} "{{ preset.name }}"?</p>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">{% translate "Delete" %}</button>
+    <a class="btn btn-secondary" href="{% url 'helpdesk:preset_list' %}">{% translate "Cancel" %}</a>
+  </form>
+{% endblock helpdesk_body %}

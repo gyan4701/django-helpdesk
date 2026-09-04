@@ -1,0 +1,54 @@
+{% extends "helpdesk/base.html" %}
+{% load i18n %}
+
+{% block helpdesk_title %}{% translate "Pre-set Replies" %}{% endblock helpdesk_title %}
+
+{% block helpdesk_breadcrumb %}
+  <li class="breadcrumb-item"><a href="{% url 'helpdesk:list' %}">{% translate "Tickets" %}</a></li>
+  <li class="breadcrumb-item active" aria-current="page">{% translate "Pre-set Replies" %}</li>
+{% endblock helpdesk_breadcrumb %}
+
+{% block helpdesk_body %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3">{% translate "Pre-set Replies" %}</h1>
+    <a class="btn btn-primary" href="{% url 'helpdesk:preset_edit' %}">{% translate "Create Pre-set Reply" %}</a>
+  </div>
+
+  {% if presets %}
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead>
+          <tr>
+            <th>{% translate "Name" %}</th>
+            <th>{% translate "Queues" %}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in presets %}
+            <tr>
+              <td>{{ p.name }}</td>
+              <td>
+                {% if p.queues.all %}
+                  {% if p.queues.count %}
+                    {% for q in p.queues.all %}{{ q }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                  {% else %}
+                    {% translate "Global" %}
+                  {% endif %}
+                {% else %}
+                  {% translate "Global" %}
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'helpdesk:preset_edit' p.id %}">{% translate "Edit" %}</a>
+                <a class="btn btn-sm btn-outline-danger" href="{% url 'helpdesk:preset_delete' p.id %}">{% translate "Delete" %}</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="text-muted">{% translate "No pre-set replies have been created." %}</p>
+  {% endif %}
+{% endblock helpdesk_body %}
