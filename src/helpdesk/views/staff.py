@@ -1305,7 +1305,9 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         for ticket in tickets_qs:
             # Safe attribute access for related objects
             queue_str = str(ticket.queue) if getattr(ticket, "queue", None) else ""
-            assigned_str = str(ticket.assigned_to) if getattr(ticket, "assigned_to", None) else ""
+            assigned_str = (
+                str(ticket.assigned_to) if getattr(ticket, "assigned_to", None) else ""
+            )
             # Prefer human-readable status/priority if available
             status = (
                 ticket.get_status_display()
@@ -1318,9 +1320,7 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
                 else ticket.priority
             )
             created = (
-                ticket.created.isoformat()
-                if getattr(ticket, "created", None)
-                else ""
+                ticket.created.isoformat() if getattr(ticket, "created", None) else ""
             )
 
             writer.writerow(
@@ -1331,7 +1331,9 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
                     priority,
                     queue_str,
                     assigned_str,
-                    ticket.submitter_email if getattr(ticket, "submitter_email", None) else "",
+                    ticket.submitter_email
+                    if getattr(ticket, "submitter_email", None)
+                    else "",
                     created,
                 ]
             )
