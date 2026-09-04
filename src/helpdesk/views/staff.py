@@ -1557,11 +1557,11 @@ rss_list = staff_member_required(rss_list)
 
 @helpdesk_staff_member_required
 def report_index(request):
-    number_tickets = Ticket.objects.all().count()
     saved_query = request.GET.get("saved_query", None)
 
     user_queues = HelpdeskUser(request.user).get_queues()
     Tickets = Ticket.objects.filter(queue__in=user_queues)
+    number_tickets = Tickets.count()
     basic_ticket_stats = calc_basic_ticket_stats(Tickets)
 
     # The following query builds a grid of queues & ticket statuses,
