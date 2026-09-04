@@ -1318,6 +1318,61 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         "helpdesk_settings": helpdesk_settings,
     }
 
+    # CSV export handling: if requested, return a downloadable CSV of the tickets
+    if request.GET.get("format", "").lower() == "csv":
+        import csv
+
+        # Build a Query object using the same base64 query we've generated for the page
+        qobj = Query(HelpdeskUser(request.user), base64query=urlsafe_query)
+        queryset = qobj.get()
+
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="tickets.csv"'
+
+        writer = csv.writer(response)
+        # Header row
+        writer.writerow(
+            [
+                "id",
+                "title",
+                "queue",
+                "status",
+                "priority",
+                "assigned_to",
+                "submitter_email",
+                "created",
+                "updated",
+                "due_date",
+            ]
+        )
+
+        for ticket in queryset:
+            writer.writerow(
+                [
+                    ticket.id,
+                    ticket.title,
+                    str(ticket.queue) if ticket.queue is not None else "",
+                    ticket.get_status_display()
+                    if hasattr(ticket, "get_status_display")
+                    else (ticket.status if hasattr(ticket, "status") else ""),
+                    ticket.get_priority_display()
+                    if hasattr(ticket, "get_priority_display")
+                    else (ticket.priority if hasattr(ticket, "priority") else ""),
+                    str(ticket.assigned_to) if ticket.assigned_to is not None else "",
+                    ticket.submitter_email or "",
+                    ticket.created.isoformat()
+                    if getattr(ticket, "created", None) is not None
+                    else "",
+                    ticket.updated.isoformat()
+                    if getattr(ticket, "updated", None) is not None
+                    else "",
+                    ticket.due_date.isoformat()
+                    if getattr(ticket, "due_date", None) is not None
+                    else "",
+                ]
+            )
+        return response
+
     return render(request, "helpdesk/ticket_list.html", ctx)
 
 
