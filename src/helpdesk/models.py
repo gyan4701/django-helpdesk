@@ -1362,6 +1362,72 @@ class PreSetReply(models.Model):
         ),
     )
 
+    def save(self, *args, **kwargs):
+        """Save with optional server-side validation of assigned queues.
+
+        This method accepts an optional keyword argument ``acting_user``.
+        When provided, it validates that the queues being assigned to this
+        PreSetReply are all within the set returned by
+        helpdesk.views.staff.get_user_queues(acting_user). If the validation
+        fails a PermissionDenied is raised and the save does not proceed.
+
+        It also accepts an optional ``queues`` keyword argument (an iterable
+        of Queue instances or queue ids/strings) to validate against the
+        acting user's accessible queues prior to persisting. If ``queues``
+        is not provided, the current m2m assignment (for existing instances)
+        is used for validation. New instances with no queues provided are
+        treated as having an empty set of queues.
+        """
+        acting_user = kwargs.pop("acting_user", None)
+        queues_arg = kwargs.pop("queues", None)
+
+        if acting_user is not None:
+            # Imported here to avoid module import cycles at module import time.
+            from django.core.exceptions import PermissionDenied
+
+            from helpdesk.views.staff import get_user_queues
+
+            user_queues = get_user_queues(acting_user)
+            user_queue_ids = set()
+            for q in user_queues:
+                if hasattr(q, "id"):
+                    user_queue_ids.add(int(q.id))
+                else:
+                    try:
+                        user_queue_ids.add(int(q))
+                    except (TypeError, ValueError):
+                        # Unable to determine the user's accessible queues in a
+                        # reliable manner; treat this as a permission failure.
+                        raise PermissionDenied(
+                            "Unable to determine the queues accessible to the user."
+                        )
+
+            # Determine the set of queue ids that are being assigned to this
+            # PreSetReply for validation. If queues_arg is provided, use it;
+            # otherwise, for existing instances, use the current m2m values.
+            if queues_arg is not None:
+                new_queue_ids = set()
+                for q in queues_arg:
+                    if hasattr(q, "id"):
+                        new_queue_ids.add(int(q.id))
+                    else:
+                        try:
+                            new_queue_ids.add(int(q))
+                        except (TypeError, ValueError):
+                            raise PermissionDenied("Invalid queue identifier provided.")
+            else:
+                if self.pk is None:
+                    new_queue_ids = set()
+                else:
+                    new_queue_ids = set(self.queues.values_list("id", flat=True))
+
+            if not new_queue_ids.issubset(user_queue_ids):
+                raise PermissionDenied(
+                    "You do not have permission to assign one or more queues to this pre-set reply."
+                )
+
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.name}"
 
