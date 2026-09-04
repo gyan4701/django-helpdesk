@@ -1275,6 +1275,65 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         Q(user=request.user) | Q(shared__exact=True)
     )
 
+    # CSV export of the currently filtered ticket list (bypass pagination)
+    if request.GET.get("export") == "csv":
+        import csv
+
+        # Build the filtered queryset using the same saved/base64 query
+        query = Query(HelpdeskUser(request.user), base64query=urlsafe_query)
+        tickets_qs = query.get()
+
+        # Stream CSV response
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="tickets.csv"'
+        writer = csv.writer(response)
+
+        # Header row
+        writer.writerow([
+            "ID",
+            "Title",
+            "Status",
+            "Priority",
+            "Queue",
+            "Assigned To",
+            "Submitter Email",
+            "Created",
+        ])
+
+        for ticket in tickets_qs:
+            # Safe attribute access for related objects
+            queue_str = str(ticket.queue) if getattr(ticket, "queue", None) else ""
+            assigned_str = str(ticket.assigned_to) if getattr(ticket, "assigned_to", None) else ""
+            # Prefer human-readable status/priority if available
+            status = (
+                ticket.get_status_display()
+                if hasattr(ticket, "get_status_display")
+                else ticket.status
+            )
+            priority = (
+                ticket.get_priority_display()
+                if hasattr(ticket, "get_priority_display")
+                else ticket.priority
+            )
+            created = (
+                ticket.created.isoformat()
+                if getattr(ticket, "created", None)
+                else ""
+            )
+
+            writer.writerow([
+                ticket.id,
+                ticket.title,
+                status,
+                priority,
+                queue_str,
+                assigned_str,
+                ticket.submitter_email if getattr(ticket, "submitter_email", None) else "",
+                created,
+            ])
+
+        return response
+
     # Search notice message
     search_message = ""
     is_sqlite = settings.DATABASES["default"]["ENGINE"].endswith("sqlite")
