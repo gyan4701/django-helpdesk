@@ -1289,16 +1289,18 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         writer = csv.writer(response)
 
         # Header row
-        writer.writerow([
-            "ID",
-            "Title",
-            "Status",
-            "Priority",
-            "Queue",
-            "Assigned To",
-            "Submitter Email",
-            "Created",
-        ])
+        writer.writerow(
+            [
+                "ID",
+                "Title",
+                "Status",
+                "Priority",
+                "Queue",
+                "Assigned To",
+                "Submitter Email",
+                "Created",
+            ]
+        )
 
         for ticket in tickets_qs:
             # Safe attribute access for related objects
@@ -1321,16 +1323,18 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
                 else ""
             )
 
-            writer.writerow([
-                ticket.id,
-                ticket.title,
-                status,
-                priority,
-                queue_str,
-                assigned_str,
-                ticket.submitter_email if getattr(ticket, "submitter_email", None) else "",
-                created,
-            ])
+            writer.writerow(
+                [
+                    ticket.id,
+                    ticket.title,
+                    status,
+                    priority,
+                    queue_str,
+                    assigned_str,
+                    ticket.submitter_email if getattr(ticket, "submitter_email", None) else "",
+                    created,
+                ]
+            )
 
         return response
 
