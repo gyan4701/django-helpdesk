@@ -1318,6 +1318,118 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         "helpdesk_settings": helpdesk_settings,
     }
 
+    # If requested, export the current filtered/sorted ticket set as CSV
+    if request.GET.get("export") == "csv":
+        # Local imports to avoid top-level import churn and to satisfy import ordering rules
+        import csv
+        import io
+
+        from django.http import StreamingHttpResponse
+
+        # Build base queryset reusing the filter dictionaries produced above
+        qs = Ticket.objects.select_related("queue", "assigned_to").all()
+
+        filtering = query_params.get("filtering", {}) or {}
+        filtering_null = query_params.get("filtering_null", {}) or {}
+
+        if filtering:
+            qs = qs.filter(**filtering)
+
+        for null_filter, is_null in filtering_null.items():
+            # Expecting boolean True to indicate isnull should be applied
+            if is_null:
+                qs = qs.filter(**{null_filter: True})
+
+        # Apply simple keyword search consistent with the staff filter choice
+        search_string = query_params.get("search_string", "")
+        if search_string:
+            s = search_string.strip()
+            if s:
+                # Search across commonly searched fields
+                qs = qs.filter(
+                    Q(title__icontains=s)
+                    | Q(description__icontains=s)
+                    | Q(submitter_email__icontains=s)
+                    | Q(id__exact=s)  # allow direct id match when numeric
+                )
+
+        # Apply sorting
+        sorting = query_params.get("sorting") or "created"
+        sortreverse = query_params.get("sortreverse")
+        order_field = (
+            f"-{sorting}"
+            if sortreverse and str(sortreverse).lower() not in ("false", "0", "")
+            else sorting
+        )
+        qs = qs.order_by(order_field)
+
+        # CSV generation: header must exactly match required column names
+        header = [
+            "ticket id",
+            "title",
+            "status",
+            "priority",
+            "queue",
+            "assignee",
+            "submitter email",
+            "creation date",
+        ]
+
+        def row_iterator(queryset):
+            pseudo_buffer = io.StringIO()
+            writer = csv.writer(pseudo_buffer)
+
+            # Write header
+            writer.writerow(header)
+            data = pseudo_buffer.getvalue()
+            yield data.encode("utf-8")
+            pseudo_buffer.seek(0)
+            pseudo_buffer.truncate(0)
+
+            for ticket in queryset.iterator():
+                # Prepare row values, ensuring strings and safe fallbacks
+                tid = str(ticket.id)
+                title = ticket.title or ""
+                # Use ticket.get_status() to match display used in staff views
+                try:
+                    status = ticket.get_status()
+                except TypeError:
+                    # In case get_status is a property-like call instead
+                    status = (
+                        ticket.get_status
+                        if callable(getattr(ticket, "get_status", None))
+                        else str(ticket.status)
+                    )
+                try:
+                    priority = ticket.get_priority_display()
+                except (AttributeError, TypeError, ValueError):
+                    priority = str(ticket.priority)
+                queue = str(ticket.queue) if ticket.queue is not None else ""
+                assignee = (
+                    ticket.get_assigned_to
+                    if not callable(getattr(ticket, "get_assigned_to", None))
+                    else ticket.get_assigned_to()
+                )
+                submitter = ticket.submitter_email or ""
+                created = (
+                    ticket.created.isoformat()
+                    if getattr(ticket, "created", None) is not None
+                    else ""
+                )
+
+                writer.writerow(
+                    [tid, title, status, priority, queue, assignee, submitter, created]
+                )
+                data = pseudo_buffer.getvalue()
+                yield data.encode("utf-8")
+                pseudo_buffer.seek(0)
+                pseudo_buffer.truncate(0)
+
+        filename = "tickets.csv"
+        response = StreamingHttpResponse(row_iterator(qs), content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
     return render(request, "helpdesk/ticket_list.html", ctx)
 
 
