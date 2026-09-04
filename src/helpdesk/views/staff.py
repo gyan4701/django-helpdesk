@@ -1489,12 +1489,100 @@ def raw_details(request, type_):
     if type_ not in ("preset",):
         raise Http404
 
+    # Allow creating a new PreSetReply from the staff UI. The POST must
+    # include action=create, name, body and optional queues values. Only
+    # queues within the staff member's accessible queues are allowed.
+    if (
+        type_ == "preset"
+        and request.method == "POST"
+        and request.POST.get("action") == "create"
+    ):
+        # Import here to keep top-level import ordering unchanged.
+        from django.http import (
+            HttpResponseBadRequest,
+            HttpResponseForbidden,
+            JsonResponse,
+        )
+
+        # Queue is a first-party model; import after third-party imports.
+        from helpdesk.models import Queue
+
+        name = (request.POST.get("name") or "").strip()
+        body = (request.POST.get("body") or "").strip()
+
+        # Collect queues from repeated form fields or comma-separated value
+        queues_raw = request.POST.getlist("queues")
+        if not queues_raw:
+            single = request.POST.get("queues")
+            if single:
+                queues_raw = [q.strip() for q in single.split(",") if q.strip()]
+
+        try:
+            queue_ids = [int(q) for q in queues_raw if q != ""]
+        except ValueError:
+            return HttpResponseBadRequest("Invalid queue id")
+
+        if not name:
+            return HttpResponseBadRequest("Missing name")
+        if not body:
+            return HttpResponseBadRequest("Missing body")
+
+        # Use existing helper to determine which queues the user can access.
+        accessible_qs = get_user_queues(request.user)
+        accessible_ids = {q.id for q in accessible_qs}
+
+        # If queue_ids is empty that means the preset is global (no queues)
+        if any(qid not in accessible_ids for qid in queue_ids):
+            return HttpResponseForbidden(
+                "One or more selected queues are not accessible"
+            )
+
+        preset = PreSetReply.objects.create(name=name, body=body)
+        if queue_ids:
+            qs = Queue.objects.filter(id__in=queue_ids)
+            preset.queues.set(qs)
+
+        return JsonResponse(
+            {
+                "id": preset.id,
+                "name": preset.name,
+                "body": preset.body,
+                "queues": list(preset.queues.values_list("id", flat=True)),
+            }
+        )
+
+    # Return the body for a specific preset id as before.
     if type_ == "preset" and request.GET.get("id", False):
         try:
             preset = PreSetReply.objects.get(id=request.GET.get("id"))
             return HttpResponse(preset.body)
         except PreSetReply.DoesNotExist:
             raise Http404
+
+    # Return a JSON list of presets the staff member may use (their queues
+    # and global presets with no queues).
+    if type_ == "preset" and request.method == "GET":
+        from django.http import JsonResponse
+
+        accessible_qs = get_user_queues(request.user)
+        accessible_ids = [q.id for q in accessible_qs]
+
+        presets = PreSetReply.objects.filter(
+            Q(queues__in=accessible_ids) | Q(queues__isnull=True)
+        ).distinct()
+
+        data = []
+        for p in presets:
+            data.append(
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "body": p.body,
+                    "queues": list(p.queues.values_list("id", flat=True)),
+                }
+            )
+
+        return JsonResponse(data, safe=False)
 
     raise Http404
 
