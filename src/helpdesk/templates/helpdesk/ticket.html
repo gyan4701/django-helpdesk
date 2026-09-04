@@ -212,6 +212,100 @@
                   {% translate "Selecting a pre-set reply will over-write your comment below. You can then modify the pre-set reply to your liking before saving this update." %}
                 </span>
               </div>
+              <div id="preset-management" class="mb-3" data-endpoint="{% url 'helpdesk:raw_details' 'preset_replies' %}">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <strong>{% translate "Manage Pre-set Replies" %}</strong>
+                  <div>
+                    <button type="button" class="btn btn-outline-primary btn-sm preset-create">{% translate "Create" %}</button>
+                  </div>
+                </div>
+                <ul class="list-group" id="preset-list">
+                  {% for preset in preset_replies %}
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                      <div>
+                        <strong>{{ preset.name }}</strong>
+                        <div class="small text-muted">{{ preset.body|truncatechars:100 }}</div>
+                      </div>
+                      <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-light preset-edit" data-id="{{ preset.id }}">{% translate "Edit" %}</button>
+                        <button type="button" class="btn btn-light text-danger preset-delete" data-id="{{ preset.id }}">{% translate "Delete" %}</button>
+                      </div>
+                    </li>
+                  {% endfor %}
+                </ul>
+              </div>
+              <script>
+                (function(){
+                  function getCookie(name) {
+                    var cookieValue = null;
+                    if (document.cookie && document.cookie !== '') {
+                      var cookies = document.cookie.split(';');
+                      for (var i = 0; i < cookies.length; i++) {
+                        var cookie = cookies[i].trim();
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                          break;
+                        }
+                      }
+                    }
+                    return cookieValue;
+                  }
+                  var container = document.getElementById('preset-management');
+                  if (!container) return;
+                  var endpoint = container.getAttribute('data-endpoint');
+                  var csrftoken = getCookie('csrftoken');
+                  function postAction(data) {
+                    return fetch(endpoint, {
+                      method: 'POST',
+                      headers: {'X-CSRFToken': csrftoken},
+                      credentials: 'same-origin',
+                      body: data
+                    });
+                  }
+                  var createBtn = container.querySelector('.preset-create');
+                  if (createBtn) {
+                    createBtn.addEventListener('click', function(){
+                      var name = prompt('{% translate "Name for new pre-set reply" %}');
+                      if (!name) return;
+                      var body = prompt('{% translate "Body for new pre-set reply" %}');
+                      if (body === null) return;
+                      var fd = new FormData();
+                      fd.append('action','create');
+                      fd.append('name', name);
+                      fd.append('body', body);
+                      postAction(fd).then(function(r){ if (r.ok) location.reload(); else r.text().then(function(t){ alert(t); }); });
+                    });
+                  }
+                  Array.prototype.forEach.call(container.querySelectorAll('.preset-edit'), function(btn){
+                    btn.addEventListener('click', function(){
+                      var id = btn.getAttribute('data-id');
+                      var li = btn.closest('li');
+                      var curName = li.querySelector('strong') ? li.querySelector('strong').textContent.trim() : '';
+                      var curBody = li.querySelector('.small') ? li.querySelector('.small').textContent : '';
+                      var name = prompt('{% translate "Edit pre-set reply name" %}', curName);
+                      if (name === null) return;
+                      var body = prompt('{% translate "Edit pre-set reply body" %}', curBody);
+                      if (body === null) return;
+                      var fd = new FormData();
+                      fd.append('action','edit');
+                      fd.append('id', id);
+                      fd.append('name', name);
+                      fd.append('body', body);
+                      postAction(fd).then(function(r){ if (r.ok) location.reload(); else r.text().then(function(t){ alert(t); }); });
+                    });
+                  });
+                  Array.prototype.forEach.call(container.querySelectorAll('.preset-delete'), function(btn){
+                    btn.addEventListener('click', function(){
+                      var id = btn.getAttribute('data-id');
+                      if (!confirm('{% translate "Delete this pre-set reply?" %}')) return;
+                      var fd = new FormData();
+                      fd.append('action','delete');
+                      fd.append('id', id);
+                      postAction(fd).then(function(r){ if (r.ok) location.reload(); else r.text().then(function(t){ alert(t); }); });
+                    });
+                  });
+                })();
+              </script>
               {% endif %}
               {# Comment text box #}
               <div class="mb-3">
