@@ -41,10 +41,6 @@ from django.utils.timezone import now
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import requires_csrf_token
 from django.views.generic.edit import FormView, UpdateView
-from rest_framework import status
-from rest_framework.decorators import api_view
-
-from helpdesk import settings as helpdesk_settings
 from helpdesk.decorators import (
     helpdesk_staff_member_required,
     helpdesk_superuser_required,
@@ -101,8 +97,12 @@ from helpdesk.update_ticket import (
     update_ticket,
 )
 from helpdesk.user import HelpdeskUser
-from helpdesk.views import abstract_views
 from helpdesk.views.permissions import MustBeStaffMixin
+from rest_framework import status
+from rest_framework.decorators import api_view
+
+from helpdesk import settings as helpdesk_settings
+from helpdesk.views import abstract_views
 
 from ..lib import format_time_spent
 from ..templated_email import send_templated_mail
@@ -1569,7 +1569,7 @@ def report_index(request):
     #          Open  Resolved
     # Queue 1    10     4
     # Queue 2     4    12
-    Queues = user_queues if user_queues else Queue.objects.all()
+    Queues = user_queues
 
     dash_tickets = []
     for queue in Queues:
