@@ -575,8 +575,9 @@ def view_ticket(request, ticket_id):
             "submitter_userprofile_url": submitter_userprofile_url,
             "form": form,
             "preset_replies": PreSetReply.objects.filter(
-                Q(queues=ticket.queue) | Q(queues__isnull=True)
-            ),
+                Q(queues__in=HelpdeskUser(request.user).get_queues())
+                | Q(queues__isnull=True)
+            ).distinct(),
             "ticketcc_string": ticketcc_string,
             "SHOW_SUBSCRIBE": show_subscribe,
             "checklist_form": checklist_form,
