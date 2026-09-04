@@ -211,6 +211,11 @@
                 <span class="form-text">
                   {% translate "Selecting a pre-set reply will over-write your comment below. You can then modify the pre-set reply to your liking before saving this update." %}
                 </span>
+                {% if user.is_staff %}
+                  <div class="mt-2">
+                    <a class="btn btn-sm btn-outline-secondary" href="{% url 'helpdesk:raw' 'presetreplies' %}">{% translate "Manage pre-set replies" %}</a>
+                  </div>
+                {% endif %}
               </div>
               {% endif %}
               {# Comment text box #}
