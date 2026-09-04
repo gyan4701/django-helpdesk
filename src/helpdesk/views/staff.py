@@ -1318,6 +1318,69 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         "helpdesk_settings": helpdesk_settings,
     }
 
+    # If an export to CSV is requested, use the query helpers so the
+    # exported rows exactly match the filters and sort applied on the staff
+    # ticket list page. Accept either a base64-encoded query (urlsafe_query
+    # or query) or use the constructed query_params as a fallback.
+    if request.GET.get("format") == "csv" or request.GET.get("export") == "csv":
+        from io import StringIO
+        import csv
+        from django.http import HttpResponse
+        from helpdesk.query import get_query_class
+
+        # Prefer an explicit base64-encoded query if provided so saved/complex
+        # queries are reproduced exactly. Accept either `urlsafe_query` (used
+        # by the ticket list template) or a generic `query` param.
+        base64query = request.GET.get("urlsafe_query") or request.GET.get("query")
+
+        QueryClass = get_query_class()
+        if base64query:
+            qobj = QueryClass(huser, base64query=base64query)
+        else:
+            # Fall back to the query_params constructed above
+            qobj = QueryClass(huser, base64query=None, query_params=query_params)
+
+        queryset = qobj.get()
+
+        # Build CSV. Keep a conservative set of columns matching the ticket
+        # list. The important contract is that the rows follow the same
+        # filtering and ordering as the UI.
+        buffer = StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(
+            [
+                "id",
+                "title",
+                "status",
+                "queue",
+                "assigned_to",
+                "priority",
+                "created",
+                "due_date",
+                "submitter_email",
+            ]
+        )
+        for t in queryset:
+            writer.writerow(
+                [
+                    t.id,
+                    t.title,
+                    t.get_status_display()
+                    if hasattr(t, "get_status_display")
+                    else t.status,
+                    str(t.queue) if t.queue else "",
+                    str(t.assigned_to) if t.assigned_to else "",
+                    t.priority,
+                    t.created.isoformat() if getattr(t, "created", None) else "",
+                    t.due_date.isoformat() if getattr(t, "due_date", None) else "",
+                    t.submitter_email,
+                ]
+            )
+
+        resp = HttpResponse(buffer.getvalue(), content_type="text/csv")
+        resp["Content-Disposition"] = 'attachment; filename="helpdesk_tickets.csv"'
+        return resp
+
     return render(request, "helpdesk/ticket_list.html", ctx)
 
 
