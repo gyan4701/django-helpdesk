@@ -32,6 +32,7 @@
 {% endblock helpdesk_breadcrumb %}
 
 {% block helpdesk_body %}
+<a id="helpdesk-export-csv" class="btn btn-sm btn-outline-secondary" href="#" title="Export CSV of current filtered tickets" onclick="(function(){var search=location.search||''; /* remove any page param so export covers full filtered set */ search=search.replace(/([?&])page=[^&]*(&?)/,'$1'); search=search.replace(/[?&]$/,''); if(search){ location.href = location.pathname + search + (search.indexOf('?')===-1 ? '?' : '&') + 'export=csv'; } else { location.href = location.pathname + '?export=csv'; } return false; })();">CSV</a>
   {% if helpdesk_settings.HELPDESK_TICKETS_TIMELINE_ENABLED %}
     <ul class="nav nav-underline justify-content-end mx-3">
       <li class="nav-item">
