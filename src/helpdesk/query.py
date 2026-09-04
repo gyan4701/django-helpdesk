@@ -276,6 +276,35 @@ class __Query__:
             queryset = queryset.filter(get_search_filter_args(search_value))
 
         count = queryset.count()
+        # If an export is requested (for example CSV export from the staff ticket list),
+        # return the full filtered queryset across all pages rather than a paginated
+        # slice. The view that invokes this should pass an "export" flag (e.g. "csv")
+        # in kwargs so that the full result set is returned for export.
+        #
+        # Performance note: returning the full filtered queryset can be expensive for
+        # very large result sets. The queryset produced by get() already uses
+        # select_related() to reduce N+1 query issues, and the last_followup
+        # annotation is attached earlier where needed. Consumers should be aware
+        # that this may evaluate many rows and use significant memory/time.
+        export_flag = kwargs.get("export", None)
+        is_export_csv = False
+        if isinstance(export_flag, list):
+            is_export_csv = any(v == "csv" for v in export_flag)
+        else:
+            is_export_csv = export_flag == "csv"
+
+        if is_export_csv:
+            # Do not apply page slicing for exports — order the full queryset and
+            # serialize everything so CSV output covers all matching tickets.
+            queryset = queryset.order_by(order_column)
+            data = DatatablesTicketSerializer(queryset, many=True).data
+            return {
+                "data": data,
+                "recordsFiltered": count,
+                "recordsTotal": total,
+                "draw": draw,
+            }
+
         queryset = queryset.order_by(order_column)[start : start + length]
         return {
             "data": DatatablesTicketSerializer(queryset, many=True).data,
