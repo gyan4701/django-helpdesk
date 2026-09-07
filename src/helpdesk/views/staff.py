@@ -21,7 +21,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.views import redirect_to_login
 from django.contrib.contenttypes.models import ContentType
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import FieldError, PermissionDenied
 from django.core.handlers.wsgi import WSGIRequest
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import Case, F, Q, When
@@ -1317,6 +1317,122 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         "search_message": search_message,
         "helpdesk_settings": helpdesk_settings,
     }
+
+    # CSV export handling: if requested, stream a CSV of matching tickets to keep
+    # memory bounded for large result sets. We accept a few common query params
+    # for compatibility with various UI links: ?export=csv, ?format=csv or ?csv=1
+    if (
+        request.GET.get("export") == "csv"
+        or request.GET.get("format") == "csv"
+        or request.GET.get("csv") == "1"
+    ):
+        # Local imports so module-level imports are unchanged
+        import csv
+        import io
+
+        from django.http import StreamingHttpResponse
+        from django.utils.formats import date_format
+
+        # Build base queryset from query_params while reusing the existing
+        # filter dicts already populated above. This keeps filters consistent
+        # with the UI. We also ensure tickets are limited to queues the user
+        # can access.
+        qs = Ticket.objects.all()
+
+        # Apply filtering dict (simple direct lookups)
+        for lookup, value in query_params.get("filtering", {}).items():
+            try:
+                qs = qs.filter(**{lookup: value})
+            except (FieldError, ValueError, TypeError):
+                # If an invalid lookup/value is present, skip applying it to avoid
+                # failing the export; this mirrors the lenient parsing in the UI.
+                # Catch only expected errors that can arise from invalid lookups/values
+                # and continue processing the remaining filters.
+                continue
+
+        # Apply null filters
+        for lookup, val in query_params.get("filtering_null", {}).items():
+            qs = qs.filter(**{lookup: val})
+
+        # Enforce queue-level access: limit to queues returned by huser.get_queues()
+        allowed_queue_ids = set()
+        for item in huser.get_queues():
+            if isinstance(item, (list, tuple)) and item:
+                allowed_queue_ids.add(item[0])
+            else:
+                # object-like
+                pk = getattr(item, "pk", None)
+                if pk is not None:
+                    allowed_queue_ids.add(pk)
+        if not allowed_queue_ids:
+            # No accessible queues -> empty result
+            qs = Ticket.objects.none()
+        else:
+            qs = qs.filter(queue__id__in=allowed_queue_ids)
+
+        # Sorting
+        sort = query_params.get("sorting") or "created"
+        sortreverse = query_params.get("sortreverse")
+        if sortreverse:
+            order = "-" + sort
+        else:
+            order = sort
+        try:
+            qs = qs.order_by(order)
+        except FieldError:
+            # Fall back to created if given ordering is invalid
+            qs = qs.order_by("created")
+
+        # Prepare CSV generator
+        def generate_rows(queryset):
+            # Use StringIO + csv.writer per row to ensure correct quoting/escaping
+            header = [
+                "ID",
+                "Queue",
+                "Title",
+                "Status",
+                "Priority",
+                "Assigned To",
+                "Created",
+                "Submitter E-Mail",
+            ]
+            sio = io.StringIO()
+            writer = csv.writer(sio)
+            writer.writerow(header)
+            yield sio.getvalue().encode("utf-8")
+
+            # Use iterator() to avoid loading all objects into memory
+            for ticket in queryset.iterator():
+                sio = io.StringIO()
+                writer = csv.writer(sio)
+                created_val = ""
+                if getattr(ticket, "created", None):
+                    # Format date consistently with the UI DATETIME_FORMAT
+                    created_val = date_format(ticket.created, "DATETIME_FORMAT")
+                assigned = getattr(ticket, "get_assigned_to", None)
+                if callable(assigned):
+                    assigned = assigned()
+                row = [
+                    ticket.id,
+                    getattr(ticket.queue, "slug", getattr(ticket.queue, "pk", "")),
+                    ticket.title,
+                    ticket.get_status_display()
+                    if hasattr(ticket, "get_status_display")
+                    else ticket.status,
+                    ticket.priority,
+                    assigned or "",
+                    created_val,
+                    ticket.submitter_email or "",
+                ]
+                writer.writerow(row)
+                yield sio.getvalue().encode("utf-8")
+
+        filename = "tickets.csv"
+        response = StreamingHttpResponse(
+            generate_rows(qs), content_type="text/csv; charset=utf-8"
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
     return render(request, "helpdesk/ticket_list.html", ctx)
 
