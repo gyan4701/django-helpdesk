@@ -1275,6 +1275,60 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         Q(user=request.user) | Q(shared__exact=True)
     )
 
+    # CSV export handling: if requested, return a downloadable CSV of the tickets
+    if request.GET.get("export") == "csv":
+        import csv
+        import io
+
+        from ..query import get_query_class
+        from .api import accessible_tickets
+
+        # Base queryset limited to tickets accessible by this user
+        base_qs = accessible_tickets(request.user)
+
+        # Apply the same filtering & sorting as used for the HTML page
+        QueryClass = get_query_class()
+        query_runner = QueryClass(huser, urlsafe_query, query_params)
+        tickets_qs = query_runner.__run__(base_qs)
+
+        # Build CSV in-memory (text), then encode to UTF-8 bytes for response
+        buf = io.StringIO()
+        writer = csv.writer(buf, quoting=csv.QUOTE_MINIMAL)
+        header = [
+            "id",
+            "queue",
+            "title",
+            "submitter_email",
+            "assigned_to",
+            "status",
+            "priority",
+            "created",
+            "due_date",
+            "modified",
+        ]
+        writer.writerow(header)
+
+        for ticket in tickets_qs:
+            writer.writerow(
+                [
+                    ticket.id,
+                    str(ticket.queue),
+                    ticket.title,
+                    ticket.submitter_email,
+                    ticket.get_assigned_to,
+                    ticket.get_status(),
+                    ticket.priority,
+                    str(ticket.created) if ticket.created is not None else "",
+                    str(ticket.due_date) if ticket.due_date is not None else "",
+                    str(ticket.modified) if ticket.modified is not None else "",
+                ]
+            )
+
+        data = buf.getvalue().encode("utf-8")
+        response = HttpResponse(data, content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="tickets.csv"'
+        return response
+
     # Search notice message
     search_message = ""
     is_sqlite = settings.DATABASES["default"]["ENGINE"].endswith("sqlite")
