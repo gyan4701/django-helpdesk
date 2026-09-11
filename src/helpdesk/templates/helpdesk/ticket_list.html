@@ -13,6 +13,12 @@
   {% else %}
     <link title="timeline-styles" rel="stylesheet" href="{% static 'helpdesk/vendor/timeline3/css/timeline.css' %}" />
   {% endif %}
+  <style>
+    /* Overdue row subtle left border */
+    .overdue-row { border-left: 1px solid #dc3545 !important; }
+    /* Compact overdue marker shown before the ticket title */
+    .overdue-marker { display: inline-flex; align-items: center; gap: 0.25rem; color: #dc3545; margin-right: 0.5rem; font-size: 0.9em; }
+  </style>
 {% endblock helpdesk_head %}
 
 {% block h1_title %}Tickets
@@ -351,6 +357,9 @@
                  },
                  createdRow: function(row, data, dataIndex) {
                       $(row).addClass(data.row_class);
+                      if (data.is_overdue) {
+                           $(row).addClass('overdue-row');
+                      }
                  },
                  layout: {
                       topStart: [
@@ -392,7 +401,11 @@
                            data: "ticket",
                            render: function(data, type, row, meta) {
                                 if (type === 'display') {
-                                     data = '<div class="tickettitle"><a href="' + get_url(row) + '">' +
+                                     var overdueMarker = '';
+                                     if (row.is_overdue && row.due_date) {
+                                          overdueMarker = '<span class="overdue-marker" title="Overdue since ' + htmlEntities(row.due_date) + '"><i class="fa-solid fa-exclamation me-1 text-danger" aria-hidden="true"></i><span class="visually-hidden">Overdue</span></span>';
+                                     }
+                                     data = '<div class="tickettitle">' + overdueMarker + '<a href="' + get_url(row) + '">' +
                                           row.id + '. ' +
                                           htmlEntities(row.title) + '</a></div>';
                                 }
