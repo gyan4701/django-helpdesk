@@ -1210,6 +1210,7 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         "q",
         "sort",
         "sortreverse",
+        "overdue",
         "kbitem",
     }
 
@@ -1268,6 +1269,15 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         sortreverse = request.GET.get("sortreverse", None)
         query_params["sorting"] = sort if sort in ALLOWED_SORTS else "created"
         query_params["sortreverse"] = sortreverse
+
+        # OVERDUE FILTER - accepts 'true' or 'false'; when absent, no filter applied
+        overdue = request.GET.get("overdue", None)
+        if overdue is not None:
+            o = overdue.lower()
+            if o == "true":
+                query_params["filtering"]["overdue"] = True
+            elif o == "false":
+                query_params["filtering"]["overdue"] = False
 
     urlsafe_query = query_to_base64(query_params)
 
