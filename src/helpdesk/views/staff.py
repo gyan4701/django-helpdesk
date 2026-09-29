@@ -1211,6 +1211,7 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         "sort",
         "sortreverse",
         "kbitem",
+        "overdue",
     }
 
     filters_applied = FILTERS.intersection(request.GET)
@@ -1259,6 +1260,14 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         date_to = request.GET.get("date_to")
         if date_to:
             query_params["filtering"]["created__lte"] = date_to
+
+        # OVERDUE tri-state filter: accepts 'true' or 'false' (unset means no filter)
+        overdue = request.GET.get("overdue")
+        if overdue in ("true", "false"):
+            # Persist the raw value into filtering for downstream consumers that apply
+            # the saved query to actual queryset building. The presence of this key
+            # signals whether to include only overdue ("true") or exclude overdue ("false").
+            query_params["filtering"]["overdue"] = overdue
 
         # KEYWORD SEARCHING
         query_params["search_string"] = request.GET.get("q", "")
@@ -1315,6 +1324,7 @@ def ticket_list(request: HttpRequest) -> HttpResponse:
         "from_saved_query": saved_query is not None,
         "saved_query": saved_query,
         "search_message": search_message,
+        "overdue": request.GET.get("overdue", None),
         "helpdesk_settings": helpdesk_settings,
     }
 
