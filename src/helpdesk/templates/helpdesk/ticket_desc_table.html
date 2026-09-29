@@ -69,8 +69,16 @@
           {% if ticket.due_date %}
             <a class="link-secondary"
                href="#"
+               tabindex="0"
+               role="button"
+               aria-label="Overdue"
+               aria-describedby="overdue-{{ ticket.id }}"
                data-bs-toggle="tooltip"
-               data-bs-title="{{ ticket.due_date|naturaltime }}"><i class="fa-regular fa-hourglass ms-1"></i></a>
+               data-bs-title="{% blocktrans with due=ticket.due_date|date:"DATETIME_FORMAT" %}Overdue since {{ due }}{% endblocktrans %}"
+               title="{% blocktrans with due=ticket.due_date|date:"DATETIME_FORMAT" %}Overdue since {{ due }}{% endblocktrans %}">
+               <i class="fa-regular fa-hourglass ms-1"></i>
+               <span class="visually-hidden" id="overdue-{{ ticket.id }}">{% blocktrans with due=ticket.due_date|date:"DATETIME_FORMAT" %}Overdue since {{ due }}{% endblocktrans %}</span>
+            </a>
           {% endif %}
         </p>
       </div>
