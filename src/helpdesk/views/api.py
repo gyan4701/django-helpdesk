@@ -118,8 +118,10 @@ class TicketViewSet(viewsets.ModelViewSet):
             status_choices = helpdesk_settings.TICKET_STATUS_CHOICES
             number_statuses = []
             for status in statuses:
+                status = status.strip()
                 for choice in status_choices:
-                    if str(choice[0]) == status:
+                    # Accept either the numeric code or the human-readable name
+                    if str(choice[0]) == status or choice[1] == status:
                         number_statuses.append(choice[0])
             if number_statuses:
                 tickets = tickets.filter(status__in=number_statuses)
