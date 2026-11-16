@@ -82,7 +82,7 @@ class CustomFieldMixin:
         elif field.data_type == "list":
             fieldclass = forms.ChoiceField
             instanceargs["choices"] = field.get_choices()
-            instanceargs["widget"] = forms.Select(attrs={"class": "form-select"})
+            instanceargs["widget"] = forms.Select(attrs={"class": "form-control"})
         else:
             # Try to use the immediate equivalences dictionary
             try:
@@ -102,7 +102,7 @@ class CustomFieldMixin:
                     )
                 elif fieldclass == forms.BooleanField:
                     instanceargs["widget"] = forms.CheckboxInput(
-                        attrs={"class": "form-check-input"}
+                        attrs={"class": "form-control"}
                     )
 
             except KeyError:
