@@ -79,7 +79,7 @@ def subscribe_to_ticket_updates(
         if queryset.count() > 0:
             return queryset.first()
 
-        if user_id is None and len(email) < 5:
+        if user_id is None and (not email or len(email) < 5):
             raise ValidationError(
                 _(
                     "When you add somebody on Cc, you must provide either a User or a valid email. Email: {}"
