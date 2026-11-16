@@ -119,7 +119,8 @@ class TicketViewSet(viewsets.ModelViewSet):
             number_statuses = []
             for status in statuses:
                 for choice in status_choices:
-                    if str(choice[0]) == status:
+                    # Accept either the numeric choice key or the human-readable label
+                    if str(choice[0]) == status or str(choice[1]) == status:
                         number_statuses.append(choice[0])
             if number_statuses:
                 tickets = tickets.filter(status__in=number_statuses)
